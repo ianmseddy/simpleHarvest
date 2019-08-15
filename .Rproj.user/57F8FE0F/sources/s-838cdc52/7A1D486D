@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1565903734378.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3762692114",
+    "id" : "7A1D486D",
+    "lastKnownWriteTime" : 1565905342,
+    "last_content_update" : 1565905342646,
+    "path" : "~/Git/simpleHarvest/simpleHarvest.R",
+    "project_path" : "simpleHarvest.R",
+    "properties" : {
+        "cursorPosition" : "199,129",
+        "scrollLine" : "190"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

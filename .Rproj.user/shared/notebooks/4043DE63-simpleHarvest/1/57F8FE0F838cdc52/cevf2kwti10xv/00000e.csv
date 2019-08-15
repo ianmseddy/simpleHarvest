@@ -1,0 +1,71 @@
+"0","mySim <- simInit(times = times, params = parameters, modules = modules,
+                 objects = objects)
+"
+"2","Setting:
+  options(
+    reproducible.cachePath = '/home/ieddy/temp'
+    spades.inputPath = '/home/ieddy/temp'
+    spades.outputPath = '/home/ieddy/temp'
+    spades.modulePath = '/home/ieddy/Git'
+  )
+"
+"2","[35msimpleHarvest: module code: rstCurrentHarvest is declared in metadata outputObjects, but is not assigned in the module[39m
+"
+"2","[35msimpleHarvest: module code: areasToExclude, demRaster are declared in metadata inputObjects, but no default(s) are provided in .inputObjects[39m
+"
+"2","[35msimpleHarvest: module code: areasToExclude, cohortData, demRaster, pixelGroupMap are declared in metadata inputObjects, but are not used in the module[39m
+"
+"2","[35msimpleHarvest: module code: .inputObjects: local variable ‘cacheTags’ assigned but may not be used (/home/ieddy/Git/simpleHarvest/simpleHarvest.R:186)[39m
+"
+"2","[35msimpleHarvest: inputObjects: AnnualBiomassHarvestTarget, MaximumAllowableCutSize are assigned to sim inside .inputObjects, but are not declared in metadata inputObjects[39m
+"
+"2","[35msimpleHarvest: inputObjects: AnnualBiomassHarvestTarget is used from sim inside .inputObjects, but is not declared in metadata inputObjects[39m
+"
+"2","[32mRunning .inputObjects for simpleHarvest[39m
+"
+"2","simpleHarvest: using dataPath '/home/ieddy/Git/simpleHarvest/data'.
+"
+"2","study area not supplied. Defaulting to Ft. St. John TSA
+"
+"2","Running preProcess
+"
+"2","  File on Google Drive is 1.9 Mb
+"
+"2","Preparing: 
+"
+"2","[35mChecking local files...[39m
+"
+"2","[35mFinished checking local files.[39m
+"
+"2","   Skipping download because all needed files are listed in CHECKSUMS.txt file and are present. If this is not correct, rerun prepInputs with purge = TRUE
+"
+"2","No targetFile supplied. Extracting all files from archive
+"
+"2","  Skipping extractFromArchive attempt: no files missing
+"
+"2","  targetFile was not specified.  Trying shapefile on ftStJohn_studyArea.shp. If that is not correct, please specify a different targetFile and/or fun.
+"
+"2","Loading object into R
+"
+"2","[34m  ...(Object to retrieve is large: 2.6 Mb)[39m
+"
+"2","[34m  loading memoised result from previous shapefile call.[39m
+"
+"2","rasterToMatch not supplied. Defaulting to LCC2005. CRS will overide that of studyArea, if one was provided
+"
+"2","[34m  ...(Object to retrieve is large: 4.4 Mb)[39m
+"
+"2","[34m  loading memoised result from previous prepInputs call.[39m
+"
+"1","Called from: "
+"1",".inputObjects(sim)
+"
+"1","debug at /home/ieddy/Git/simpleHarvest/simpleHarvest.R#202: "
+"1","sim$studyArea <- spTransform(sim$studyArea, CRSobj = crs(sim$rasterToMatch))
+"
+"0","c"
+"2","either cohortData, pixelGroup, or both are not supplied. Using simulated data. Consider running the module LBMR
+"
+"2","number of items to replace is not a multiple of replacement length"
+"2","harvestAreas not supplied. You should really supply harvestAreas so simulated units correspond to raster. Modifying studyArea instead.
+"
