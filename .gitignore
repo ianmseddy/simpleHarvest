@@ -1,11 +1,13 @@
 .httr-oauth
-.Rproj.user/
+.Rproj.user/*
 .Rhistory
 .RData
 .Ruserdata
+*.Rproj*
+.Ruserdata
 *.Rproj
 .httr-oauth
-
+.Rproj.user
 cache/
 
 data/
