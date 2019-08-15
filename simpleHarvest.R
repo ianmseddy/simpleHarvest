@@ -5,7 +5,8 @@
 # in R packages. If exact location is required, functions will be: sim$<moduleName>$FunctionName
 defineModule(sim, list(
   name = "simpleHarvest",
-  description = "This is a simple harvest module designed to interface with the LandR suite of modules.", 
+  description = "This is a simple harvest module designed to interface with the LandR suite of modules. It will create a harvest map, but 
+  will not simulate actual harvest. Should be paired with LandR_reforestation", 
   keywords = c("harvest", "LandR", "rstCurrentHarvest"),
   authors = c(person(c("Ian"), "Eddy", email = "ian.eddy@canada.ca", role = c("aut", "cre"))),
   childModules = character(0),
@@ -24,7 +25,9 @@ defineModule(sim, list(
     defineParameter(".saveInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between save events"),
     defineParameter(".useCache", "logical", FALSE, NA, NA, "Should this entire module be run with caching activated? 
                     This is generally intended for data-type modules, where stochasticity and time are not relevant"),
-    defineParameter("ElevationToExclude", "numeric", NA, NA, NA, "Elevation threshold above which areas are excluded from harvest")
+    defineParameter("ElevationToExclude", "numeric", NA, NA, NA, "Elevation threshold above which areas are excluded from harvest"),
+    defineParameter("minAndMaxAgesToHarvest", "numeric", c(40, 100), NA, NA, desc =  "minimum and maximum ages of trees to harvest"),
+    #defieParameter("speciesToHarvest", ... need to consier allowing only certain species
     
   ),
   inputObjects = bind_rows(
@@ -66,44 +69,32 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
       # schedule future event(s)
       sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "simpleHarvest", "plot")
       sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "simpleHarvest", "save")
+      sim <- scheduleEvent(sim, time(sim), "harvest")
     },
     plot = {
-      # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-      #plotFun(sim) # uncomment this, replace with object to plot
-      # schedule future event(s)
-
-      # e.g.,
+      
       #sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "simpleHarvest", "plot")
 
-      # ! ----- STOP EDITING ----- ! #
     },
     save = {
       # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-      # e.g., call your custom functions/methods here
-      # you can define your own methods below this `doEvent` function
-
-      # schedule future event(s)
-
-      # e.g.,
+      
       # sim <- scheduleEvent(sim, time(sim) + P(sim)$.saveInterval, "simpleHarvest", "save")
 
       # ! ----- STOP EDITING ----- ! #
     },
-    event1 = {
+    harvest = {
       # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
+      if (LandR::scheduleDisturbance(sim$rstCurrentHarvest, time(sim))) {
+        sim$rstCurrentHarvest <- harvestTrees(pixelGroupMap = sim$pixelGroupMap,
+                                              cohortData = sim$cohortData,
+                                              harvestExclusionRaster = sim$harvestExclusionRaster,
+                                              harvestPAreas = sim$harvestAreas,
+                                              ageWindow = P(sim)$minAndMaxAgesToHarvest
+                                              )
+      }
 
-      # e.g., call your custom functions/methods here
-      # you can define your own methods below this `doEvent` function
-
-      # schedule future event(s)
-
-      # e.g.,
-      # sim <- scheduleEvent(sim, time(sim) + increment, "simpleHarvest", "templateEvent")
+      sim <- scheduleEvent(sim, time(sim) + 1, "simpleHarvest", "harvest")
 
       # ! ----- STOP EDITING ----- ! #
     },
@@ -133,8 +124,8 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 ### template initialization
 Init <- function(sim) {
   
- sim$harvestExclusionRaster <- generateExclusionRaster()#args to come
-  return(invisible(sim))
+ # sim$harvestExclusionRaster <- generateExclusionRaster()#args to come
+ #  return(invisible(sim))
 }
 
 ### template for save events
@@ -149,36 +140,25 @@ Save <- function(sim) {
 
 ### template for plot events
 plotFun <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # do stuff for this event
-  #Plot(sim$object)
 
-  # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
 }
 
-### template for your event1
-Event1 <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # THE NEXT TWO LINES ARE FOR DUMMY UNIT TESTS; CHANGE OR DELETE THEM.
-  # sim$event1Test1 <- " this is test for event 1. " # for dummy unit test
-  # sim$event1Test2 <- 999 # for dummy unit test
-
-
-  # ! ----- STOP EDITING ----- ! #
-  return(invisible(sim))
-}
-
-### template for your event2
-Event2 <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # THE NEXT TWO LINES ARE FOR DUMMY UNIT TESTS; CHANGE OR DELETE THEM.
-  # sim$event2Test1 <- " this is test for event 2. " # for dummy unit test
-  # sim$event2Test2 <- 777  # for dummy unit test
-
-
-  # ! ----- STOP EDITING ----- ! #
-  return(invisible(sim))
+harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas, ageWindow) {
+  
+  #Make an ageMap
+  maxAges <- cohortData[, .(totalB = sum(B), age = max(age)), .(pixelGroup)]
+  pixID <- data.table('pixelGroup' = getValues(pixelGroupMap), "pixelIndex" = 1:ncell(pixelGroupMap))
+  landStats <- maxAges[pixID, on = c("pixelGroup")]
+  ageMap <- pixelGroupMap
+  ageMap[] <- landStats$age
+  # Think up a more clever way for getting 1s for harvestable  and 0 for non
+  ageMap[!ageMap[] > min(ageWindow) & ageMap[] < max(ageWindow)] <- 0
+  #set up ageMap probability to accept spread
+  
+  #Need to use maxSize to make certain max of biomass and harvest size
+  # Need to figure out how much maximum 
+  
 }
 
 .inputObjects <- function(sim) {
