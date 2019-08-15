@@ -1,1 +1,11 @@
-*.Rprojuser
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.httr-oauth
+
+cache/
+
+data/
+*outputs/
