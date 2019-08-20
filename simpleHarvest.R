@@ -16,7 +16,7 @@ defineModule(sim, list(
   timeunit = "year",
   citation = list("citation.bib"),
   documentation = list("README.txt", "simpleHarvest.Rmd"),
-  reqdPkgs = list("PredictiveEcology/LandR@development", "sp", "raster"),
+  reqdPkgs = list("PredictiveEcology/LandR@development", "sp", "raster", 'sf', 'magrittr', 'fasterize'),
   parameters = rbind(
     #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
     defineParameter(".plotInitialTime", "numeric", NA, NA, NA, "This describes the simulation time at which the first plot event should occur"),
@@ -32,7 +32,7 @@ defineModule(sim, list(
   ),
   inputObjects = bind_rows(
     expectsInput('areasToExclude', objectClass = 'SpatialPolygonsDataFrame', desc = "A shapefile with all areas to exclude from harvest, e.g. National parks,
-                 riparian areas. Defaults to a series of relevant areas in British Columbia"),
+                 riparian areas"),
     expectsInput('cohortData', objectClass = 'data.table', desc = "table with pixelGroup, age, species, and biomass of cohorts"),
     expectsInput(objectName = 'demRaster', objectClass = 'RasterLayer', desc = 'a DEM used to exclude areas from harvest. If not provided, 
                  there will be no elevation restriction applied to harvest', sourceURL = NA),
@@ -102,13 +102,6 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       # do stuff for this event
 
-      # e.g., call your custom functions/methods here
-      # you can define your own methods below this `doEvent` function
-
-      # schedule future event(s)
-
-      # e.g.,
-      # sim <- scheduleEvent(sim, time(sim) + increment, "simpleHarvest", "templateEvent")
 
       # ! ----- STOP EDITING ----- ! #
     },
@@ -123,9 +116,30 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 
 ### template initialization
 Init <- function(sim) {
+  browser()
+  if (!is.null(sim$areasToExclude) | !is.na(sim$DEMraster)) {
+    if (!is.null(sim$areasToExclude)){
+      
+      protectedAreas <- spTransform(sim$areasToExclude, CRSobj = sim$rasterToMatch) %>%
+        st_as_sf(.) %>%
+        fasterize(sf = ., field = NULL, background = 0)
+    }
   
- # sim$harvestExclusionRaster <- generateExclusionRaster()#args to come
- #  return(invisible(sim))
+    if (!is.null(sim$DEMraster)) {
+      dem <- sim$DEMraster %>%
+        projectRaster(., sim$rasterToMatch, method = 'bilinear') %>%
+      dem[dem < P(sim)$ElevationToExclude] <- 0
+      dem[dem >= P(sim)$ElevationToExclude] <- 1
+      if (!is.null(protectedAreas)) {
+        protectedAreas <- sum(protectedAreas, dem)
+        protectedAreas[protectedAreas > 0] <- 1
+      }
+      
+    }
+    sim$harvestExclusionRaster <- protectedAreas
+  }
+  
+  return(invisible(sim))
 }
 
 ### template for save events
@@ -150,8 +164,7 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
   maxAges <- cohortData[, .(totalB = sum(B), age = max(age)), .(pixelGroup)]
   pixID <- data.table('pixelGroup' = getValues(pixelGroupMap), "pixelIndex" = 1:ncell(pixelGroupMap))
   landStats <- maxAges[pixID, on = c("pixelGroup")]
-  ageMap <- pixelGroupMap
-  ageMap[] <- landStats$age
+  ageMap <- setValues(pixelGroupMap, landStats$age)
   # Think up a more clever way for getting 1s for harvestable  and 0 for non
   ageMap[!ageMap[] > min(ageWindow) & ageMap[] < max(ageWindow)] <- 0
   #set up ageMap probability to accept spread
