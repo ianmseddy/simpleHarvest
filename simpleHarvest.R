@@ -26,7 +26,7 @@ defineModule(sim, list(
     defineParameter(".useCache", "logical", FALSE, NA, NA, "Should this entire module be run with caching activated? 
                     This is generally intended for data-type modules, where stochasticity and time are not relevant"),
     defineParameter("ElevationToExclude", "numeric", NA, NA, NA, "Elevation threshold above which areas are excluded from harvest"),
-    defineParameter("minAndMaxAgesToHarvest", "numeric", c(40, 100), NA, NA, desc =  "minimum and maximum ages of trees to harvest"),
+    defineParameter("minAndMaxAgesToHarvest", "numeric", c(40, 100), NA, NA, desc =  "minimum and maximum ages of trees to harvest")
     #defieParameter("speciesToHarvest", ... need to consier allowing only certain species
     
   ),
@@ -175,7 +175,7 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
 }
 
 .inputObjects <- function(sim) {
-  
+  browser()
   cacheTags <- c(currentModule(sim), "function:.inputObjects") ## uncomment this if Cache is being used
   dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
   message(currentModule(sim), ": using dataPath '", dPath, "'.")
@@ -198,7 +198,7 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
     message("either cohortData, pixelGroup, or both are not supplied. Using simulated data. Consider running the module LBMR")
     sim$cohortData <- data.table("pixelGroup" = c(1, 2), "speciesCode" = c("Pice_mar", "Pice_gla"), B = c(1000, 500), age = c(50, 10))
     temp <- sim$rasterToMatch
-    temp[temp < 15] <- sample(c(1,2), size = ncell(temp), replace = TRUE)
+    temp[temp < 15] <- sample(c(1,2), size = length(temp[temp < 15]), replace = TRUE)
     temp[temp > 2] <- NA
     sim$pixelGroupMap <- temp
   }

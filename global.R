@@ -1,9 +1,10 @@
 library(SpaDES)
+library(raster)
 
-setPaths(modulePath = file.path("/home/ieddy/Git"),
-         inputPath = file.path("../../temp"),
-         outputPath = file.path("../../temp"),
-         cachePath = file.path("../../temp"))
+setPaths(modulePath = file.path("../"),
+         inputPath = file.path("inputs"),
+         outputPath = file.path("ouputs"),
+         cachePath = file.path("cache"))
 
 getPaths() # shows where the 4 relevant paths are
 
@@ -15,8 +16,12 @@ parameters <- list(
   #module1 = list(param1 = value1, param2 = value2),
   #module2 = list(param1 = value1, param2 = value2)
 )
+dem <- raster("C:/Ian/Data/Elevation/GMTED2010 West Canada 500/GMTED2010N50W150_150/50n150w_20101117_gmted_med150.tif")
+parks <- shapefile("C:/Ian/Data/Protected Areas/BC/TA_PARK_ECORES_PA_SVW/TA_PEP_SVW_polygon.shp")
+
 modules <- list("simpleHarvest")
-objects <- list()
+objects <- list("DEMraster" = dem,
+                'areasToExclude' = parks)
 inputs <- list()
 outputs <- list()
 
