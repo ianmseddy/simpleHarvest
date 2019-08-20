@@ -25,7 +25,7 @@ defineModule(sim, list(
     defineParameter(".saveInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between save events"),
     defineParameter(".useCache", "logical", FALSE, NA, NA, "Should this entire module be run with caching activated? 
                     This is generally intended for data-type modules, where stochasticity and time are not relevant"),
-    defineParameter("ElevationToExclude", "numeric", NA, NA, NA, "Elevation threshold above which areas are excluded from harvest"),
+    defineParameter("ElevationToExclude", "numeric", 1500, NA, NA, "Elevation threshold above which areas are excluded from harvest"),
     defineParameter("minAndMaxAgesToHarvest", "numeric", c(40, 100), NA, NA, desc =  "minimum and maximum ages of trees to harvest")
     #defieParameter("speciesToHarvest", ... need to consier allowing only certain species
     
@@ -117,21 +117,21 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 ### template initialization
 Init <- function(sim) {
   browser()
-  if (!is.null(sim$areasToExclude) | !is.na(sim$DEMraster)) {
+  if (!is.null(sim$areasToExclude) | !is.null(sim$DEMraster)) {
     if (!is.null(sim$areasToExclude)){
       
-      protectedAreas <- spTransform(sim$areasToExclude, CRSobj = sim$rasterToMatch) %>%
+      protectedAreas <- spTransform(sim$areasToExclude, CRSobj = crs(sim$rasterToMatch)) %>%
         st_as_sf(.) %>%
-        fasterize(sf = ., field = NULL, background = 0)
+        fasterize(sf = ., raster = sim$rasterToMatch, field = NULL)
     }
   
     if (!is.null(sim$DEMraster)) {
-      dem <- sim$DEMraster %>%
-        projectRaster(., sim$rasterToMatch, method = 'bilinear') %>%
-      dem[dem < P(sim)$ElevationToExclude] <- 0
-      dem[dem >= P(sim)$ElevationToExclude] <- 1
+      dem <- postProcess(sim$DEMraster, rasterToMatch = sim$rasterToMatch,
+                         studyArea = sim$studyArea, method = "bilinear", useCache = TRUE, filename2 = NULL)
+      dem[dem[] < P(sim)$ElevationToExclude] <- 0
+      dem[dem[] >= P(sim)$ElevationToExclude] <- 1
       if (!is.null(protectedAreas)) {
-        protectedAreas <- sum(protectedAreas, dem)
+        protectedAreas <- overlay(protectedAreas, dem, fun = 'sum')
         protectedAreas[protectedAreas > 0] <- 1
       }
       
@@ -175,7 +175,6 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
 }
 
 .inputObjects <- function(sim) {
-  browser()
   cacheTags <- c(currentModule(sim), "function:.inputObjects") ## uncomment this if Cache is being used
   dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
   message(currentModule(sim), ": using dataPath '", dPath, "'.")
@@ -192,6 +191,7 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
     message("rasterToMatch not supplied. Defaulting to LCC2005. CRS will overide that of studyArea, if one was provided")
     sim$rasterToMatch <- prepInputsLCC(studyArea = sim$studyArea, filename2 = NULL, destinationPath = tempdir(), useCache = TRUE)
     sim$studyArea <- spTransform(sim$studyArea, CRSobj = crs(sim$rasterToMatch))
+    sim$rasterToMatch <- mask(sim$rasterToMatch, sim$studyArea)
   }
 
   if (!suppliedElsewhere("cohortData", sim) & !suppliedElsewhere('pixelGroupMap', sim)) {
