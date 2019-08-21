@@ -69,7 +69,7 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
       # schedule future event(s)
       sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "simpleHarvest", "plot")
       sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "simpleHarvest", "save")
-      sim <- scheduleEvent(sim, time(sim), "harvest")
+      sim <- scheduleEvent(sim, time(sim), "simpleHarvest", "harvest")
     },
     plot = {
       
@@ -88,13 +88,13 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
       if (LandR::scheduleDisturbance(sim$rstCurrentHarvest, time(sim))) {
         sim$rstCurrentHarvest <- harvestTrees(pixelGroupMap = sim$pixelGroupMap,
                                               cohortData = sim$cohortData,
-                                              harvestExclusionRaster = sim$harvestExclusionRaster,
-                                              harvestPAreas = sim$harvestAreas,
+                                              exclusionAreas = sim$harvestExclusionRaster,
+                                              harvestAreas = sim$harvestAreas,
                                               ageWindow = P(sim)$minAndMaxAgesToHarvest
                                               )
       }
 
-      sim <- scheduleEvent(sim, time(sim) + 1, "simpleHarvest", "harvest")
+      sim <- scheduleEvent(sim, time(sim) + 1,  "simpleHarvest", "harvest")
 
       # ! ----- STOP EDITING ----- ! #
     },
@@ -116,23 +116,27 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 
 ### template initialization
 Init <- function(sim) {
-  browser()
+ 
   if (!is.null(sim$areasToExclude) | !is.null(sim$DEMraster)) {
     if (!is.null(sim$areasToExclude)){
       
       protectedAreas <- spTransform(sim$areasToExclude, CRSobj = crs(sim$rasterToMatch)) %>%
         st_as_sf(.) %>%
-        fasterize(sf = ., raster = sim$rasterToMatch, field = NULL)
+        fasterize(sf = ., raster = sim$rasterToMatch, field = NULL, background = 0)
     }
   
     if (!is.null(sim$DEMraster)) {
+      browser()
       dem <- postProcess(sim$DEMraster, rasterToMatch = sim$rasterToMatch,
-                         studyArea = sim$studyArea, method = "bilinear", useCache = TRUE, filename2 = NULL)
+                         studyArea = sim$studyArea, useCache = TRUE, filename2 = NULL)
       dem[dem[] < P(sim)$ElevationToExclude] <- 0
       dem[dem[] >= P(sim)$ElevationToExclude] <- 1
       if (!is.null(protectedAreas)) {
-        protectedAreas <- overlay(protectedAreas, dem, fun = 'sum')
+        protVal <- getValues(protectedAreas)
+        demVal <- getValues(dem)
+        protectedAreas[] <-protVal + demVal
         protectedAreas[protectedAreas > 0] <- 1
+        protectedAreas[is.na(dem)] <- NA
       }
       
     }
@@ -159,18 +163,32 @@ plotFun <- function(sim) {
 }
 
 harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas, ageWindow) {
-  
+  browser()
   #Make an ageMap
   maxAges <- cohortData[, .(totalB = sum(B), age = max(age)), .(pixelGroup)]
   pixID <- data.table('pixelGroup' = getValues(pixelGroupMap), "pixelIndex" = 1:ncell(pixelGroupMap))
+  #Join with pixel ID
   landStats <- maxAges[pixID, on = c("pixelGroup")]
+  
+  #I assume this method is faster than matching the pixelGroup raster values with a vector
   ageMap <- setValues(pixelGroupMap, landStats$age)
-  # Think up a more clever way for getting 1s for harvestable  and 0 for non
-  ageMap[!ageMap[] > min(ageWindow) & ageMap[] < max(ageWindow)] <- 0
-  #set up ageMap probability to accept spread
+  
+  #Profile this method...
+  mat <- c(-Inf, min(ageWindow), 1, min(ageWindow), max(ageWindow), 0, max(ageWindow), Inf, 1) %>%
+    matrix(., ncol = 3, byrow = TRUE)
+  ageMap <- reclassify(ageMap, rcl = mat)
+  
+  #harvestable ages are now 1
+  
+  #Now add ageMap and non-harvestable areas. 
+  exlVals <- getValues(exclusionAreas)
+  ageVals <- getValues(ageMap)
+  nonharvestable <- setValues(ageMap, sum(exlVals, ageVals))
+  
+  #only zeros can be harvested
+  
   
   #Need to use maxSize to make certain max of biomass and harvest size
-  # Need to figure out how much maximum 
   
 }
 
