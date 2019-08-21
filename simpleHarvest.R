@@ -49,7 +49,8 @@ defineModule(sim, list(
   outputObjects = bind_rows(
     #createsOutput("objectName", "objectClass", "output object description", ...),
     createsOutput(objectName = 'rstCurrentHarvest', objectClass = 'RasterLayer', desc = 'Binary raster representing annual harvested areas'),
-    createsOutput(objectName = 'harvestExclusionRaster', objectClass = "RasterLayer", desc = "Binary raster representing areas that will never be harvested")
+    createsOutput(objectName = 'harvestExclusionRaster', objectClass = "RasterLayer", desc = "Binary raster representing areas that will never be harvested"),
+    createsOutput(objectName = "harvestIndex", objectClass = "data.table", desc = "data.table with cell indices for harvest areas")
   )
 ))
 
@@ -126,7 +127,6 @@ Init <- function(sim) {
     }
   
     if (!is.null(sim$DEMraster)) {
-      browser()
       dem <- postProcess(sim$DEMraster, rasterToMatch = sim$rasterToMatch,
                          studyArea = sim$studyArea, useCache = TRUE, filename2 = NULL)
       dem[dem[] < P(sim)$ElevationToExclude] <- 0
@@ -142,6 +142,13 @@ Init <- function(sim) {
     }
     sim$harvestExclusionRaster <- protectedAreas
   }
+  
+  
+  #Generate harvestLandscapeIndex
+  valsByPoly <- Cache(raster::extract, sim$rasterToMatch, sim$harvestAreas, cellNumbers = TRUE)
+  valsByPoly <- data.table('index' = lapply(valsByPoly, na.omit))
+  valsByPoly$name <- names(valsByPoly)
+  sim$harvestIndex <- valsByPoly
   
   return(invisible(sim))
 }
@@ -173,7 +180,6 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
   #I assume this method is faster than matching the pixelGroup raster values with a vector
   ageMap <- setValues(pixelGroupMap, landStats$age)
   
-  #Profile this method...
   mat <- c(-Inf, min(ageWindow), 1, min(ageWindow), max(ageWindow), 0, max(ageWindow), Inf, 1) %>%
     matrix(., ncol = 3, byrow = TRUE)
   ageMap <- reclassify(ageMap, rcl = mat)
@@ -183,10 +189,17 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
   #Now add ageMap and non-harvestable areas. 
   exlVals <- getValues(exclusionAreas)
   ageVals <- getValues(ageMap)
-  nonharvestable <- setValues(ageMap, sum(exlVals, ageVals))
+  nonharvest <- setValues(ageMap, c(exlVals + ageVals))
   
   #only zeros can be harvested
+  spreadP <- nonharvest
+
+  #Need some kind of mechanism to decide where to cut. Randomly sample without replacement... but how many spots
+  cutAmounts <- lapply(sim$non)
   
+  SpaDES.tools::spread2(landscape = nonharvest, )
+  spreadP[nonharvest[] > 0] <- 0
+  spreadP[nonharvest = 0] <- 0.25 #This is the pertinent question. 
   
   #Need to use maxSize to make certain max of biomass and harvest size
   
