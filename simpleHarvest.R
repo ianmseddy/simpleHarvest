@@ -37,9 +37,10 @@ defineModule(sim, list(
     expectsInput(objectName = 'demRaster', objectClass = 'RasterLayer', desc = 'a DEM used to exclude areas from harvest. If not provided, 
                  there will be no elevation restriction applied to harvest', sourceURL = NA),
     expectsInput("harvestAreas", objectClass = "SpatialPolygonsDataFrame", desc = 'A shapefile with layers representing unique harvest areas that 
-    contains (at least) two *IMPORTANT* attributes:
+    contains (at least) 3 *IMPORTANT* attributes:
                  - 1) AnnualBiomassHarvestTarget: the annual biomass (Mg) to remove, 
-                 - 2) MaximumAllowableCutSize: the maximum allowable size for a single contiguous harvest (ha).'),
+                 - 2) MaximumAllowableCutSize: the maximum allowable size for a single contiguous harvest (ha).
+                 - 3) meanCutSize: the mean size of cut blocks (ha)'),
     expectsInput("pixelGroupMap", objectClass = "RasterLayer", desc = "Raster giving locations of pixelGroups"),
     expectsInput('rasterToMatch', objectClass = 'RasterLayer', desc = 'a template raster for all raster operations. Cannot have lat/long projection', 
                  sourceURL = NA),
@@ -91,7 +92,8 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
                                               cohortData = sim$cohortData,
                                               exclusionAreas = sim$harvestExclusionRaster,
                                               harvestAreas = sim$harvestAreas,
-                                              ageWindow = P(sim)$minAndMaxAgesToHarvest
+                                              ageWindow = P(sim)$minAndMaxAgesToHarvest,
+                                              harvestIndex = sim$harvestIndex
                                               )
       }
 
@@ -143,12 +145,13 @@ Init <- function(sim) {
     sim$harvestExclusionRaster <- protectedAreas
   }
   
-  
-  #Generate harvestLandscapeIndex
-  valsByPoly <- Cache(raster::extract, sim$rasterToMatch, sim$harvestAreas, cellNumbers = TRUE)
-  valsByPoly <- data.table('index' = lapply(valsByPoly, na.omit))
-  valsByPoly$name <- names(valsByPoly)
-  sim$harvestIndex <- valsByPoly
+  #I dont' know if extract is faster than fasterize + extracting cell index for each unique value
+  #Generate harvestLandscapeIndex needed for spread events
+  sim$harvestAreas$newID <- as.numeric(row.names(sim$harvestAreas))
+  harvestAreas <- sf::st_as_sf(sim$harvestAreas)
+  harvestLand <- fasterize(sf = harvestAreas, raster = sim$rasterToMatch, field = 'newID')
+  harvestIndex <- data.table("pixelIndex" = 1:ncell(harvestLand), "newID" = getValues(harvestLand))
+  sim$harvestIndex <- harvestIndex[!is.na(newID)]
   
   return(invisible(sim))
 }
@@ -169,8 +172,8 @@ plotFun <- function(sim) {
   return(invisible(sim))
 }
 
-harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas, ageWindow) {
-  browser()
+harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas, ageWindow, harvestIndex) {
+
   #Make an ageMap
   maxAges <- cohortData[, .(totalB = sum(B), age = max(age)), .(pixelGroup)]
   pixID <- data.table('pixelGroup' = getValues(pixelGroupMap), "pixelIndex" = 1:ncell(pixelGroupMap))
@@ -194,10 +197,19 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
   #only zeros can be harvested
   spreadP <- nonharvest
 
+  #build biomass table
+  harvestTable <- data.table(id = harvestIndex$newId, index = harvestIndex$pixelIndex, biomass = landStats$totalB,
+                  harvestStatus = getValues(nonharvest))
+  
+  
+  numberOfCuts <- lapply(sim$harvestAreas, FUN = function(id, hT = harvestTable) {
+    browser()
+  })
+  
   #Need some kind of mechanism to decide where to cut. Randomly sample without replacement... but how many spots
   cutAmounts <- lapply(sim$non)
   
-  SpaDES.tools::spread2(landscape = nonharvest, )
+  SpaDES.tools::spread2(landscape = nonharvest)
   spreadP[nonharvest[] > 0] <- 0
   spreadP[nonharvest = 0] <- 0.25 #This is the pertinent question. 
   
@@ -235,11 +247,12 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
   }
   if (!suppliedElsewhere("harvestAreas", sim)) {
     message("harvestAreas not supplied. You should really supply harvestAreas so simulated units correspond to raster. Modifying studyArea instead.")
-    sim$harvestAreas <- sim$studyArea
-    sim$harvestAreas$AnnualBiomassHarvestTarget <- 1e5
-    sim$MaximumAllowableCutSize <- 6.25 * 10 #62.5 hectares. This is for easy calculation with cell size
+    harvestAreas <- sim$studyArea
+    harvestAreas$AnnualBiomassHarvestTarget <- 1e5
+    harvestAreas$MaximumAllowableCutSize <- 6.25 * 10 #62.5 hectares. This is for easy calculation with cell size
+    harvestAreas$meanCutSize <- 6.25 * 5
+    sim$harvestAreas <- harvestAreas
   }
-  
   
   return(invisible(sim))
 }

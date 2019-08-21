@@ -18,7 +18,7 @@ parameters <- list(
 )
 dem <- raster("C:/Ian/Data/Elevation/GMTED2010 West Canada 500/GMTED2010N50W150_150/50n150w_20101117_gmted_med150.tif")
 parks <- shapefile("C:/Ian/Data/Protected Areas/BC/TA_PARK_ECORES_PA_SVW/TA_PEP_SVW_polygon.shp")
-
+#Try combining this with buffered rivers
 modules <- list("simpleHarvest")
 objects <- list("DEMraster" = dem,
                 'areasToExclude' = parks)
