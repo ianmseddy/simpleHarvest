@@ -88,13 +88,12 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
     harvest = {
       # ! ----- EDIT BELOW ----- ! #
       if (LandR::scheduleDisturbance(sim$rstCurrentHarvest, time(sim))) {
-        sim$rstCurrentHarvest <- harvestTrees(pixelGroupMap = sim$pixelGroupMap,
-                                              cohortData = sim$cohortData,
-                                              exclusionAreas = sim$harvestExclusionRaster,
-                                              harvestAreas = sim$harvestAreas,
-                                              ageWindow = P(sim)$minAndMaxAgesToHarvest,
-                                              harvestIndex = sim$harvestIndex
-                                              )
+        spreadInputs <- harvestSpreadInputs(pixelGroupMap = sim$pixelGroupMap,
+                                           cohortData = sim$cohortData,
+                                           exclusionAreas = sim$harvestExclusionRaster,
+                                           harvestAreas = sim$harvestAreas,
+                                           ageWindow = P(sim)$minAndMaxAgesToHarvest,
+                                           harvestIndex = sim$harvestIndex)
       }
 
       sim <- scheduleEvent(sim, time(sim) + 1,  "simpleHarvest", "harvest")
@@ -145,7 +144,6 @@ Init <- function(sim) {
     sim$harvestExclusionRaster <- protectedAreas
   }
   
-  #I dont' know if extract is faster than fasterize + extracting cell index for each unique value
   #Generate harvestLandscapeIndex needed for spread events
   sim$harvestAreas$newID <- as.numeric(row.names(sim$harvestAreas))
   harvestAreas <- sf::st_as_sf(sim$harvestAreas)
@@ -155,6 +153,7 @@ Init <- function(sim) {
   
   return(invisible(sim))
 }
+
 
 ### template for save events
 Save <- function(sim) {
@@ -172,8 +171,10 @@ plotFun <- function(sim) {
   return(invisible(sim))
 }
 
-harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas, ageWindow, harvestIndex) {
+harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas, ageWindow, harvestIndex) {
 
+  #This function calculates which areas are available to cut, how many cuts of mean size would be needed to achieve the target
+  # based on the mean biomass in a pixel. 
   #Make an ageMap
   maxAges <- cohortData[, .(totalB = sum(B), age = max(age)), .(pixelGroup)]
   pixID <- data.table('pixelGroup' = getValues(pixelGroupMap), "pixelIndex" = 1:ncell(pixelGroupMap))
@@ -187,33 +188,45 @@ harvestTrees <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas
     matrix(., ncol = 3, byrow = TRUE)
   ageMap <- reclassify(ageMap, rcl = mat)
   
-  #harvestable ages are now 1
-  
   #Now add ageMap and non-harvestable areas. 
   exlVals <- getValues(exclusionAreas)
   ageVals <- getValues(ageMap)
   nonharvest <- setValues(ageMap, c(exlVals + ageVals))
-  
   #only zeros can be harvested
-  spreadP <- nonharvest
-
+  
+  #Remove NAs, build table of biomass, harvest status, and id of each pixel 
+  harvestStatus = getValues(nonharvest) %>%
+    .[!is.na(.)]
+  landStats <- landStats[!is.na(age)]
+  harvestIndex <- harvestIndex[pixelIndex %in% landStats$pixelIndex]
   #build biomass table
-  harvestTable <- data.table(id = harvestIndex$newId, index = harvestIndex$pixelIndex, biomass = landStats$totalB,
-                  harvestStatus = getValues(nonharvest))
+  harvestTable <- data.table(newID = harvestIndex$newID, index = harvestIndex$pixelIndex, biomass = landStats$totalB,
+                  harvestStatus = harvestStatus)
   
+  #Join with the data in harvestAreas
+  harvestGIS <- data.table(harvestAreas@data)
+  harvestGIS <- harvestGIS[, .(newID, AnnualBiomassHarvestTarget, MaximumAllowableCutSize, meanCutSize)]
+  harvestTable <- harvestTable[harvestGIS, on = c("newID")]
   
-  numberOfCuts <- lapply(sim$harvestAreas, FUN = function(id, hT = harvestTable) {
-    browser()
-  })
+  #Find ha in a pixel and biomass conversion from g/m2 to tonnes/ha
+  UCF <- 0.1 #Unit Conversion Factor: x * 1 g/m2 -> x * 10000 g/ha ->  x * 0.01 Mg/ha
+  pixelSize <- prod(res(pixelGroupMap))/10000
+  #Calculate the no. of harvest events to simulate in each harvestID (AnnualBiomassharvestTarget/meanB/pixel*meanCutsize)
+  cutParams <- harvestTable[, .(pixelHarvestTarget = mean(AnnualBiomassHarvestTarget)/(mean(biomass) * UCF * pixelSize),
+                                meanPixelsPerCut = mean(meanCutSize)/pixelSize,
+                                maxCutPixels = mean(MaximumAllowableCutSize)/pixelSize), .(newID)]
+  CutsToSimulate <- cutParams[, .(totalCuts = round(pixelHarvestTarget/meanPixelsPerCut), maxCutPixels), .(newID)]
   
   #Need some kind of mechanism to decide where to cut. Randomly sample without replacement... but how many spots
-  cutAmounts <- lapply(sim$non)
-  
-  SpaDES.tools::spread2(landscape = nonharvest)
-  spreadP[nonharvest[] > 0] <- 0
-  spreadP[nonharvest = 0] <- 0.25 #This is the pertinent question. 
-  
-  #Need to use maxSize to make certain max of biomass and harvest size
+  #From harvestTable, sample pixels that are available to cut - consider using focal to pick blobs
+  browser()
+  locs <- lapply(CutsToSimulate$newID, FUN = function(i, hT = harvestTable, CS = CutsToSimulate){
+    browser()
+    hT <- hT[newID == i & harvestStatus == 0]
+    CS <- CS[newID == i,]
+    pix <- sample(x = hT$index, size = CutsToSimulate$totalCuts, replace = FALSE)
+    return(pix)
+  })
   
 }
 
