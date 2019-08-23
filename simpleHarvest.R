@@ -214,20 +214,36 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
   #Calculate the no. of harvest events to simulate in each harvestID (AnnualBiomassharvestTarget/meanB/pixel*meanCutsize)
   cutParams <- harvestTable[, .(pixelHarvestTarget = mean(AnnualBiomassHarvestTarget)/(mean(biomass) * UCF * pixelSize),
                                 meanPixelsPerCut = mean(meanCutSize)/pixelSize,
-                                maxCutPixels = mean(MaximumAllowableCutSize)/pixelSize), .(newID)]
+                                maxCutPixels = mean(MaximumAllowableCutSize)/pixelSize,
+                                meanPixelsPerCut = mean(meanCutSize/pixelSize)), .(newID)]
   CutsToSimulate <- cutParams[, .(totalCuts = round(pixelHarvestTarget/meanPixelsPerCut), maxCutPixels), .(newID)]
   
   #Need some kind of mechanism to decide where to cut. Randomly sample without replacement... but how many spots
   #From harvestTable, sample pixels that are available to cut - consider using focal to pick blobs
   browser()
   locs <- lapply(CutsToSimulate$newID, FUN = function(i, hT = harvestTable, CS = CutsToSimulate){
-    browser()
     hT <- hT[newID == i & harvestStatus == 0]
     CS <- CS[newID == i,]
     pix <- sample(x = hT$index, size = CutsToSimulate$totalCuts, replace = FALSE)
-    return(pix)
-  })
+    return(pix)})# %>%
+  #do.call(c, .)
+  names(locs) <- CutsToSimulate$newID
   
+  #calculate harvest in each area separately - this is because maxCut may differ..
+  test <- lapply(names(locs), FUN = function(i, loc = locs, landscape = nonharvest, cS = CutsToSimulate, hT = harvestTable){
+    browser()
+    loc <- locs[i]
+    cS <- cS[newID == i]
+    hT = hT[newID == i]
+    hT$harvestable <- 1
+    hT[harvestStatus > 0]$harvestable <- 0
+    probLandscape <- setValues(landscape, NA)
+    probLandscape[hT$index] <- hT$harvestable
+    #There is some missing math here. I think you want to find out how to spread 'meanPixelsPerCut' 
+    probLandscape <- probLandscape[] * cS$meanPixelsPerCut/ cS$maxCutPixels
+    
+  })  
+    
 }
 
 .inputObjects <- function(sim) {
