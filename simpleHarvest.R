@@ -236,10 +236,16 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
     hT = hT[newID == i]
     hT$harvestable <- 1
     hT[harvestStatus > 0]$harvestable <- 0
+    
+    #Calculate landscape properties
+    propHarvest <- sum(hT$harvestable)/nrow(hT$harvestable)
+    meanMaxRatio <- cS$meanPixelsPerCut/cS$maxCutPixels
     probLandscape <- setValues(landscape, NA)
     probLandscape[hT$index] <- hT$harvestable
-    #There is some missing math here. I think you want to find out how to spread 'meanPixelsPerCut' 
-    probLandscape[hT$index] <- probLandscape[hT$index] * cS$meanPixelsPerCut/ cS$maxCutPixels
+    #There is some missing math here. I think you want to find out how to spread 'meanPixelsPerCut'
+    #TODO: Fix this equation
+    #Mthe bigger the disparity between mean cut and max cut, the more total harvest will overshoot. 
+    probLandscape[hT$index] <- probLandscape[hT$index] * (1-propHarvest) * meanMaxRatio
     probLandscape
     test <- spread2(landscape = probLandscape, 
                     start = initialPixels, 
