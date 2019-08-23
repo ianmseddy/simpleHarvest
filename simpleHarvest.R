@@ -69,13 +69,14 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
       sim <- Init(sim)
 
       # schedule future event(s)
+      sim <- scheduleEvent(sim, time(sim), "simpleHarvest", "harvest")
       sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "simpleHarvest", "plot")
       sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "simpleHarvest", "save")
-      sim <- scheduleEvent(sim, time(sim), "simpleHarvest", "harvest")
+
     },
     plot = {
-      
-      #sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "simpleHarvest", "plot")
+      plot(sim$rstcurrentHarvest)
+      sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "simpleHarvest", "plot")
 
     },
     save = {
@@ -88,7 +89,7 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
     harvest = {
       # ! ----- EDIT BELOW ----- ! #
       if (LandR::scheduleDisturbance(sim$rstCurrentHarvest, time(sim))) {
-        spreadInputs <- harvestSpreadInputs(pixelGroupMap = sim$pixelGroupMap,
+        sim$rstCurrentHarvest <- harvestSpreadInputs(pixelGroupMap = sim$pixelGroupMap,
                                            cohortData = sim$cohortData,
                                            exclusionAreas = sim$harvestExclusionRaster,
                                            harvestAreas = sim$harvestAreas,
@@ -191,11 +192,11 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
   #Now add ageMap and non-harvestable areas. 
   exlVals <- getValues(exclusionAreas)
   ageVals <- getValues(ageMap)
-  nonharvest <- setValues(ageMap, c(exlVals + ageVals))
+  harvest <- setValues(ageMap, c(exlVals + ageVals))
   #only zeros can be harvested
   
   #Remove NAs, build table of biomass, harvest status, and id of each pixel 
-  harvestStatus = getValues(nonharvest) %>%
+  harvestStatus = getValues(harvest) %>%
     .[!is.na(.)]
   landStats <- landStats[!is.na(age)]
   harvestIndex <- harvestIndex[pixelIndex %in% landStats$pixelIndex]
@@ -216,11 +217,10 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
                                 meanPixelsPerCut = mean(meanCutSize)/pixelSize,
                                 maxCutPixels = mean(MaximumAllowableCutSize)/pixelSize,
                                 meanPixelsPerCut = mean(meanCutSize/pixelSize)), .(newID)]
-  CutsToSimulate <- cutParams[, .(totalCuts = round(pixelHarvestTarget/meanPixelsPerCut), maxCutPixels), .(newID)]
+  CutsToSimulate <- cutParams[, .(totalCuts = round(pixelHarvestTarget/meanPixelsPerCut), maxCutPixels, meanPixelsPerCut), .(newID)]
   
   #Need some kind of mechanism to decide where to cut. Randomly sample without replacement... but how many spots
   #From harvestTable, sample pixels that are available to cut - consider using focal to pick blobs
-  browser()
   locs <- lapply(CutsToSimulate$newID, FUN = function(i, hT = harvestTable, CS = CutsToSimulate){
     hT <- hT[newID == i & harvestStatus == 0]
     CS <- CS[newID == i,]
@@ -230,9 +230,8 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
   names(locs) <- CutsToSimulate$newID
   
   #calculate harvest in each area separately - this is because maxCut may differ..
-  test <- lapply(names(locs), FUN = function(i, loc = locs, landscape = nonharvest, cS = CutsToSimulate, hT = harvestTable){
-    browser()
-    loc <- locs[i]
+  test <- lapply(names(locs), FUN = function(i, loc = locs, landscape = harvest, cS = CutsToSimulate, hT = harvestTable){
+    initialPixels <- locs[i][[i]]
     cS <- cS[newID == i]
     hT = hT[newID == i]
     hT$harvestable <- 1
@@ -240,10 +239,19 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
     probLandscape <- setValues(landscape, NA)
     probLandscape[hT$index] <- hT$harvestable
     #There is some missing math here. I think you want to find out how to spread 'meanPixelsPerCut' 
-    probLandscape <- probLandscape[] * cS$meanPixelsPerCut/ cS$maxCutPixels
-    
+    probLandscape[hT$index] <- probLandscape[hT$index] * cS$meanPixelsPerCut/ cS$maxCutPixels
+    probLandscape
+    test <- spread2(landscape = probLandscape, 
+                    start = initialPixels, 
+                    spreadProb = probLandscape, 
+                    maxSize = cS$maxCutPixels,
+                    asRaster = FALSE)
+    return(test)
   })  
-    
+  harvestValues <- do.call(rbind, test)
+  harvest[!is.na(harvest[])] <- 0
+  harvest[harvestValues$pixels] <- 1
+  return(harvest)
 }
 
 .inputObjects <- function(sim) {
