@@ -75,7 +75,7 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 
     },
     plot = {
-      plot(sim$rstcurrentHarvest)
+      plot(sim$rstCurrentHarvest)
       sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "simpleHarvest", "plot")
 
     },
