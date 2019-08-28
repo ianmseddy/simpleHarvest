@@ -1,13 +1,14 @@
 library(SpaDES)
 library(raster)
+library(sf)
+library(magrittr)
 
 setPaths(modulePath = file.path("../"),
          inputPath = file.path("inputs"),
          outputPath = file.path("ouputs"),
          cachePath = file.path("cache"))
 
-getPaths() # shows where the 4 relevant paths are
-
+paths <- getPaths() # shows where the 4 relevant paths are
 times <- list(start = 0, end = 2)
 
 parameters <- list(
@@ -17,12 +18,26 @@ parameters <- list(
   simpleHarvest = list(.plotInitialTime = 1,
                        .plotInterval = 1)
 )
+studyArea <- shapefile("C:/Ian/Campbell/RIA/Land-R/inputs/ftStJohn_studyArea.shp")
 dem <- raster("C:/Ian/Data/Elevation/GMTED2010 West Canada 500/GMTED2010N50W150_150/50n150w_20101117_gmted_med150.tif")
-parks <- shapefile("C:/Ian/Data/Protected Areas/BC/TA_PARK_ECORES_PA_SVW/TA_PEP_SVW_polygon.shp")
+parks <- shapefile("C:/Ian/Data/Protected Areas/BC/TA_PARK_ECORES_PA_SVW/TA_PEP_SVW_polygon.shp") %>%
+  spTransform(., crs(studyArea)) %>%
+  crop(., studyArea) 
+
 #Try combining this with buffered rivers
+rivers <- Cache(shapefile, "C:/Ian/Data/Hydrography/USA_CAN_rivers.shp/") %>%
+  spTransform(., CRSobj = crs(parks)) 
+rivers <- Cache(rgeos::gIntersection, rivers, studyArea) %>%
+  sf::st_as_sf(.) %>%
+  sf::st_buffer(., 250)
+
+parks <- sf::st_as_sf(parks)
+protAreas <- Cache(sf::st_union, parks, rivers) %>% 
+  sf::as_Spatial(.)
+
 modules <- list("simpleHarvest")
 objects <- list("DEMraster" = dem,
-                'areasToExclude' = parks)
+                'areasToExclude' = protAreas)
 inputs <- list()
 outputs <- list()
 

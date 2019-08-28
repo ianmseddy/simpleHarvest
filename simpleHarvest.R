@@ -215,8 +215,9 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
   #Calculate the no. of harvest events to simulate in each harvestID (AnnualBiomassharvestTarget/meanB/pixel*meanCutsize)
   cutParams <- harvestTable[, .(pixelHarvestTarget = mean(AnnualBiomassHarvestTarget)/(mean(biomass) * UCF * pixelSize),
                                 meanPixelsPerCut = mean(meanCutSize)/pixelSize,
-                                maxCutPixels = mean(MaximumAllowableCutSize)/pixelSize,
-                                meanPixelsPerCut = mean(meanCutSize/pixelSize)), .(newID)]
+                                maxCutPixels = round(mean(MaximumAllowableCutSize)/pixelSize, digits = 0),
+                                meanPixelsPerCut = round(mean(meanCutSize/pixelSize), digits = 0)),
+                                .(newID)]
   CutsToSimulate <- cutParams[, .(totalCuts = round(pixelHarvestTarget/meanPixelsPerCut), maxCutPixels, meanPixelsPerCut), .(newID)]
   
   #Need some kind of mechanism to decide where to cut. Randomly sample without replacement... but how many spots
@@ -231,29 +232,40 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
   
   #calculate harvest in each area separately - this is because maxCut may differ..
   test <- lapply(names(locs), FUN = function(i, loc = locs, landscape = harvest, cS = CutsToSimulate, hT = harvestTable){
+    browser()
     initialPixels <- locs[i][[i]]
     cS <- cS[newID == i]
     hT = hT[newID == i]
     hT$harvestable <- 1
     hT[harvestStatus > 0]$harvestable <- 0
     
-    #Calculate landscape properties
+    #Calculate landscape properties - assume all forests have 8 valid neighbours for now 
+    #TODO: fix this assumption
     propHarvest <- sum(hT$harvestable)/nrow(hT$harvestable)
     meanMaxRatio <- cS$meanPixelsPerCut/cS$maxCutPixels
     probLandscape <- setValues(landscape, NA)
     probLandscape[hT$index] <- hT$harvestable
-    #There is some missing math here. I think you want to find out how to spread 'meanPixelsPerCut'
-    #TODO: Fix this equation
-    #Mthe bigger the disparity between mean cut and max cut, the more total harvest will overshoot. 
-    probLandscape[hT$index] <- probLandscape[hT$index] * (1-propHarvest) * meanMaxRatio
-    probLandscape
-    test <- spread2(landscape = probLandscape, 
+    
+    
+    
+    #If maxCuts > 9, this will require multiple spread iterations
+    if (cS$maxCutPixels > 9) {
+      #this is the cumulative distribution of getting the mean number of cells
+      sampleProbs <- dbinom(cS$meanPixelsPerCut, size = cS$maxCutPixels, c(1:100)/100)
+      bestProb <- c(1:100/100)[sampleProbs == max(sampleProbs)]
+      randomMaxes <- rbinom(length(initialPixels), size = cS$maxCutPixels, prob = bestProb)
+      #mean of randomMaxes should be clsoe to cS$meanPixelsPerCut
+      test <- spread2(landscape = probLandscape, 
                     start = initialPixels, 
-                    spreadProb = probLandscape, 
-                    maxSize = cS$maxCutPixels,
+                    spreadProb = probLandscape, #this is 1, so harvest will always spread to random maxes
+                    maxSize = randomMaxes,
                     asRaster = FALSE)
+    } else {
+      #find some other way to generate the data we want
+    }
     return(test)
-  })  
+  })
+  
   harvestValues <- do.call(rbind, test)
   harvest[!is.na(harvest[])] <- 0
   harvest[harvestValues$pixels] <- 1
