@@ -264,7 +264,7 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
                          maxSize = CutTable$maxCutPixels,
                          asRaster = FALSE)
     }
-    return(harvestInEachPolygon)
+    return(harvest)
   })
   
   harvestValues <- do.call(rbind, harvestInEachPolygon)
