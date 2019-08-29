@@ -27,8 +27,6 @@ defineModule(sim, list(
                     This is generally intended for data-type modules, where stochasticity and time are not relevant"),
     defineParameter("ElevationToExclude", "numeric", 1500, NA, NA, "Elevation threshold above which areas are excluded from harvest"),
     defineParameter("minAndMaxAgesToHarvest", "numeric", c(40, 100), NA, NA, desc =  "minimum and maximum ages of trees to harvest")
-    #defieParameter("speciesToHarvest", ... need to consier allowing only certain species
-    
   ),
   inputObjects = bind_rows(
     expectsInput('areasToExclude', objectClass = 'SpatialPolygonsDataFrame', desc = "A shapefile with all areas to exclude from harvest, e.g. National parks,
@@ -80,14 +78,12 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 
     },
     save = {
-      # ! ----- EDIT BELOW ----- ! #
-      
-      # sim <- scheduleEvent(sim, time(sim) + P(sim)$.saveInterval, "simpleHarvest", "save")
 
-      # ! ----- STOP EDITING ----- ! #
+      sim <- scheduleEvent(sim, time(sim) + P(sim)$.saveInterval, "simpleHarvest", "save")
+
     },
     harvest = {
-      # ! ----- EDIT BELOW ----- ! #
+
       if (LandR::scheduleDisturbance(sim$rstCurrentHarvest, time(sim))) {
         sim$rstCurrentHarvest <- harvestSpreadInputs(pixelGroupMap = sim$pixelGroupMap,
                                            cohortData = sim$cohortData,
@@ -99,14 +95,6 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 
       sim <- scheduleEvent(sim, time(sim) + 1,  "simpleHarvest", "harvest")
 
-      # ! ----- STOP EDITING ----- ! #
-    },
-    event2 = {
-      # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-
-      # ! ----- STOP EDITING ----- ! #
     },
     warning(paste("Undefined event type: '", current(sim)[1, "eventType", with = FALSE],
                   "' in module '", current(sim)[1, "moduleName", with = FALSE], "'", sep = ""))
@@ -158,16 +146,16 @@ Init <- function(sim) {
 
 ### template for save events
 Save <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # do stuff for this event
+
   sim <- saveFiles(sim)
 
-  # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
 }
 
 ### template for plot events
 plotFun <- function(sim) {
+  
+  plot(sim$rstCurrentHarvest)
 
   return(invisible(sim))
 }
@@ -220,55 +208,69 @@ harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harve
                                 .(newID)]
   CutsToSimulate <- cutParams[, .(totalCuts = round(pixelHarvestTarget/meanPixelsPerCut), maxCutPixels, meanPixelsPerCut), .(newID)]
   
-  #Need some kind of mechanism to decide where to cut. Randomly sample without replacement... but how many spots
-  #From harvestTable, sample pixels that are available to cut - consider using focal to pick blobs
-  locs <- lapply(CutsToSimulate$newID, FUN = function(i, hT = harvestTable, CS = CutsToSimulate){
-    hT <- hT[newID == i & harvestStatus == 0]
+  
+  #From harvestTable, sample pixels that are available to cut - could use focal to pick blobs but is it more trouble than worth?
+  harvestLocs <- lapply(CutsToSimulate$newID, FUN = function(i, HarvestTable = harvestTable, CS = CutsToSimulate){
+    HarvestTable <- HarvestTable[newID == i & harvestStatus == 0]
     CS <- CS[newID == i,]
-    pix <- sample(x = hT$index, size = CutsToSimulate$totalCuts, replace = FALSE)
-    return(pix)})# %>%
-  #do.call(c, .)
-  names(locs) <- CutsToSimulate$newID
+    pix <- sample(x = HarvestTable$index, size = CutsToSimulate$totalCuts, replace = FALSE)
+    return(pix)
+    })
+
+  names(harvestLocs) <- CutsToSimulate$newID
   
   #calculate harvest in each area separately - this is because maxCut may differ..
-  test <- lapply(names(locs), FUN = function(i, loc = locs, landscape = harvest, cS = CutsToSimulate, hT = harvestTable){
-    browser()
-    initialPixels <- locs[i][[i]]
-    cS <- cS[newID == i]
-    hT = hT[newID == i]
-    hT$harvestable <- 1
-    hT[harvestStatus > 0]$harvestable <- 0
+  harvestInEachPolygon <- lapply(names(harvestLocs), FUN = function(i, 
+                                                                    loc = harvestLocs, 
+                                                                    landscape = harvest, 
+                                                                    CutTable = CutsToSimulate, 
+                                                                    HarvestTable = harvestTable){
+    initialPixels <- harvestLocs[i][[i]]
+    CutTable <- CutTable[newID == i]
+    HarvestTable = HarvestTable[newID == i]
+    HarvestTable$harvestable <- 1
+    HarvestTable[harvestStatus > 0]$harvestable <- 0
     
     #Calculate landscape properties - assume all forests have 8 valid neighbours for now 
     #TODO: fix this assumption
-    propHarvest <- sum(hT$harvestable)/nrow(hT$harvestable)
-    meanMaxRatio <- cS$meanPixelsPerCut/cS$maxCutPixels
+    propHarvest <- sum(HarvestTable$harvestable)/nrow(HarvestTable$harvestable)
+    meanMaxRatio <- CutTable$meanPixelsPerCut/CutTable$maxCutPixels
     probLandscape <- setValues(landscape, NA)
-    probLandscape[hT$index] <- hT$harvestable
-    
+    probLandscape[HarvestTable$index] <- HarvestTable$harvestable
     
     
     #If maxCuts > 9, this will require multiple spread iterations
-    if (cS$maxCutPixels > 9) {
+    if (CutTable$maxCutPixels > 9) {
       #this is the cumulative distribution of getting the mean number of cells
-      sampleProbs <- dbinom(cS$meanPixelsPerCut, size = cS$maxCutPixels, c(1:100)/100)
+      sampleProbs <- dbinom(CutTable$meanPixelsPerCut, size = CutTable$maxCutPixels, c(1:100)/100)
       bestProb <- c(1:100/100)[sampleProbs == max(sampleProbs)]
-      randomMaxes <- rbinom(length(initialPixels), size = cS$maxCutPixels, prob = bestProb)
-      #mean of randomMaxes should be clsoe to cS$meanPixelsPerCut
-      test <- spread2(landscape = probLandscape, 
+      randomMaxes <- rbinom(length(initialPixels), size = CutTable$maxCutPixels, prob = bestProb)
+      
+      #mean of randomMaxes should be close to CutTable$meanPixelsPerCut but will underestimate because not all neighbours harvestable
+      #this is hard to control for because it depends on variegation of the harvestable cells
+      harvest <- spread2(landscape = probLandscape, 
                     start = initialPixels, 
                     spreadProb = probLandscape, #this is 1, so harvest will always spread to random maxes
                     maxSize = randomMaxes,
                     asRaster = FALSE)
     } else {
-      #find some other way to generate the data we want
+      sampleProbs <- dbinom(CutTable$meanPixelsPerCut, size = CutTable$maxCutPixels, c(1:100)/100)
+      bestProb <- c(1:100/100)[sampleProbs == max(sampleProbs)]
+      probLandscape[probLandscape == 1] <- bestProb
+      
+      harvest <- spread2(landscape = probLandscape, 
+                         start = initialPixels, 
+                         spreadProb = probLandscape, #this is 1, so harvest will always spread to random maxes
+                         maxSize = CutTable$maxCutPixels,
+                         asRaster = FALSE)
     }
-    return(test)
+    return(harvestInEachPolygon)
   })
   
-  harvestValues <- do.call(rbind, test)
+  harvestValues <- do.call(rbind, harvestInEachPolygon)
   harvest[!is.na(harvest[])] <- 0
   harvest[harvestValues$pixels] <- 1
+  
   return(harvest)
 }
 
