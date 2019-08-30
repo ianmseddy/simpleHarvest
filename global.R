@@ -19,6 +19,14 @@ parameters <- list(
                        .plotInterval = 1)
 )
 studyArea <- shapefile("C:/Ian/Campbell/RIA/Land-R/inputs/ftStJohn_studyArea.shp")
+harvestAreas <- studyArea %>%
+  rgeos::gUnaryUnion(spgeom = ., id = 'TSNMBRDSCR')
+harvestAreas$AnnualBiomassHarvestTarget <- 2115000 * 0.45  #cubic metres x average Mg/m3 of wood https://cedarstripkayak.wordpress.com/lumber-selection/162-2/ 
+#Probably need a more refined approach for estimating volume - This is lumber when LandR has full trees
+#For future reference
+#Mackenzie is 4500000, Dawson is 1860000, Ft Nelson is 2582350, Prince George is 8350000
+#Note that Ft Nelson needs to be labeled as Ft Nelson in the actual Final RIA TSA file (it was dropped when merging)
+
 dem <- raster("C:/Ian/Data/Elevation/GMTED2010 West Canada 500/GMTED2010N50W150_150/50n150w_20101117_gmted_med150.tif")
 parks <- shapefile("C:/Ian/Data/Protected Areas/BC/TA_PARK_ECORES_PA_SVW/TA_PEP_SVW_polygon.shp") %>%
   spTransform(., crs(studyArea)) %>%
