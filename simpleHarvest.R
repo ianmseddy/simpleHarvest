@@ -5,8 +5,8 @@
 # in R packages. If exact location is required, functions will be: sim$<moduleName>$FunctionName
 defineModule(sim, list(
   name = "simpleHarvest",
-  description = "This is a simple harvest module designed to interface with the LandR suite of modules. It will create a harvest map, but 
-  will not simulate actual harvest. Should be paired with LandR_reforestation", 
+  description = "This is a simple harvest module designed to interface with the LandR suite of modules. It will create a harvest map, but
+  will not simulate actual harvest. Should be paired with LandR_reforestation",
   keywords = c("harvest", "LandR", "rstCurrentHarvest"),
   authors = c(person(c("Ian"), "Eddy", email = "ian.eddy@canada.ca", role = c("aut", "cre"))),
   childModules = character(0),
@@ -23,7 +23,7 @@ defineModule(sim, list(
     defineParameter(".plotInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between plot events"),
     defineParameter(".saveInitialTime", "numeric", NA, NA, NA, "This describes the simulation time at which the first save event should occur"),
     defineParameter(".saveInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between save events"),
-    defineParameter(".useCache", "logical", FALSE, NA, NA, "Should this entire module be run with caching activated? 
+    defineParameter(".useCache", "logical", FALSE, NA, NA, "Should this entire module be run with caching activated?
                     This is generally intended for data-type modules, where stochasticity and time are not relevant"),
     defineParameter("ElevationToExclude", "numeric", 1500, NA, NA, "Elevation threshold above which areas are excluded from harvest"),
     defineParameter("minAndMaxAgesToHarvest", "numeric", c(40, 100), NA, NA, desc =  "minimum and maximum ages of trees to harvest")
@@ -32,15 +32,15 @@ defineModule(sim, list(
     expectsInput('areasToExclude', objectClass = 'SpatialPolygonsDataFrame', desc = "A shapefile with all areas to exclude from harvest, e.g. National parks,
                  riparian areas"),
     expectsInput('cohortData', objectClass = 'data.table', desc = "table with pixelGroup, age, species, and biomass of cohorts"),
-    expectsInput(objectName = 'demRaster', objectClass = 'RasterLayer', desc = 'a DEM used to exclude areas from harvest. If not provided, 
+    expectsInput(objectName = 'demRaster', objectClass = 'RasterLayer', desc = 'a DEM used to exclude areas from harvest. If not provided,
                  there will be no elevation restriction applied to harvest', sourceURL = NA),
-    expectsInput("harvestAreas", objectClass = "SpatialPolygonsDataFrame", desc = 'A shapefile with layers representing unique harvest areas that 
+    expectsInput("harvestAreas", objectClass = "SpatialPolygonsDataFrame", desc = 'A shapefile with layers representing unique harvest areas that
     contains (at least) 3 *IMPORTANT* attributes:
-                 - 1) AnnualBiomassHarvestTarget: the annual biomass (Mg) to remove, 
+                 - 1) AnnualBiomassHarvestTarget: the annual biomass (Mg) to remove,
                  - 2) MaximumAllowableCutSize: the maximum allowable size for a single contiguous harvest (ha).
                  - 3) meanCutSize: the mean size of cut blocks (ha)'),
     expectsInput("pixelGroupMap", objectClass = "RasterLayer", desc = "Raster giving locations of pixelGroups"),
-    expectsInput('rasterToMatch', objectClass = 'RasterLayer', desc = 'a template raster for all raster operations. Cannot have lat/long projection', 
+    expectsInput('rasterToMatch', objectClass = 'RasterLayer', desc = 'a template raster for all raster operations. Cannot have lat/long projection',
                  sourceURL = NA),
     expectsInput("studyArea", objectClass = "SpatialPolygonsDataFrame", desc = "study area used to crop spatial inputs, if applicable",
                  sourceURL = "https://drive.google.com/open?id=1TlBfGfes_6UQW4M3jib8zgY5sGd_yjmY")
@@ -163,27 +163,32 @@ plotFun <- function(sim) {
 harvestSpreadInputs <- function(pixelGroupMap, cohortData, exclusionAreas, harvestAreas, ageWindow, harvestIndex) {
 
   #This function calculates which areas are available to cut, how many cuts of mean size would be needed to achieve the target
-  # based on the mean biomass in a pixel. 
+  # based on the mean biomass in a pixel.
   #Make an ageMap
   maxAges <- cohortData[, .(totalB = sum(B), age = max(age)), .(pixelGroup)]
   pixID <- data.table('pixelGroup' = getValues(pixelGroupMap), "pixelIndex" = 1:ncell(pixelGroupMap))
   #Join with pixel ID
   landStats <- maxAges[pixID, on = c("pixelGroup")]
-  
+
   #I assume this method is faster than matching the pixelGroup raster values with a vector
   ageMap <- setValues(pixelGroupMap, landStats$age)
-  
+
   mat <- c(-Inf, min(ageWindow), 1, min(ageWindow), max(ageWindow), 0, max(ageWindow), Inf, 1) %>%
     matrix(., ncol = 3, byrow = TRUE)
   ageMap <- reclassify(ageMap, rcl = mat)
-  
-  #Now add ageMap and non-harvestable areas. 
-  exlVals <- getValues(exclusionAreas)
+
+  #Now add ageMap and non-harvestable areas
   ageVals <- getValues(ageMap)
+  if (!is.null(exclusionAreas)) {
+    exlVals <- getValues(exclusionAreas)
+  } else {
+    exlVals <- rep.int(0, times = length(ageVals))
+  }
+
   harvest <- setValues(ageMap, c(exlVals + ageVals))
   #only zeros can be harvested
-  
-  #Remove NAs, build table of biomass, harvest status, and id of each pixel 
+
+  #Remove NAs, build table of biomass, harvest status, and id of each pixel
   harvestStatus = getValues(harvest) %>%
     .[!is.na(.)]
   landStats <- landStats[!is.na(age)]
