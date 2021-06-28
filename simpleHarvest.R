@@ -6,7 +6,7 @@
 defineModule(sim, list(
   name = "simpleHarvest",
   description = paste("This is a very simplistic harvest module designed to interface with the LandR suite of modules",
-                      "It will create a raster of harvested patches, but will not simulate actual harvest.", 
+                      "It will create a raster of harvested patches, but will not simulate actual harvest.",
                       "Should be paired with LandR_reforestation",
   keywords = c("harvest", "LandR", "rstCurrentHarvest"),
   authors = c(person(c("Ian"), "Eddy", email = "ian.eddy@canada.ca", role = c("aut", "cre"))),
@@ -26,10 +26,10 @@ defineModule(sim, list(
     defineParameter(".saveInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between save events"),
     defineParameter(".useCache", "logical", FALSE, NA, NA, "Should this entire module be run with caching activated?
                     This is generally intended for data-type modules, where stochasticity and time are not relevant"),
-    defineParameter("harvestTarget", numeric, 0.01, 0, 1, 
+    defineParameter("harvestTarget", numeric, 0.01, 0, 1,
                     desc= "proportion of harvestable area to harvest each timestep"),
     defineParameter("minAgesToHarvest", "numeric", 50, 1, NA, desc =  "minimum ages of trees to harvest"),
-    defineParameter("maxPatchSizetoHarvest", numeric, 10, 1, NA, 
+    defineParameter("maxPatchSizetoHarvest", numeric, 10, 1, NA,
                     desc = "maximum size for harvestable patches, in pixels")
   ),
   inputObjects = bind_rows(
@@ -37,7 +37,7 @@ defineModule(sim, list(
     expectsInput(objectName = 'demRaster', objectClass = 'RasterLayer', desc = 'a DEM used to exclude areas from harvest. If not provided,
                  there will be no elevation restriction applied to harvest', sourceURL = NA),
     expectsInput("pixelGroupMap", objectClass = "RasterLayer", desc = "Raster giving locations of pixelGroups"),
-    expectsInput('rasterToMatch', objectClass = 'RasterLayer', 
+    expectsInput('rasterToMatch', objectClass = 'RasterLayer',
                  desc = 'a template raster for all raster operations. Cannot have lat/long projection'),
     expectsInput("studyArea", objectClass = "SpatialPolygonsDataFrame", desc = "study area used to crop spatial inputs, if applicable",
                  sourceURL = "https://drive.google.com/open?id=1TlBfGfes_6UQW4M3jib8zgY5sGd_yjmY"),
@@ -128,46 +128,47 @@ plotFun <- function(sim) {
   return(invisible(sim))
 }
 
-harvestSpreadInputs <- function(pixelGroupMap, 
-                                cohortData, 
-                                exclusionAreas, 
+harvestSpreadInputs <- function(pixelGroupMap,
+                                cohortData,
+                                exclusionAreas,
                                 harvestAreas,
                                 maxCutSize,
                                 minAgesToHarvest,
                                 target,
                                 harvestIndex) {
 
+  browser()
   #This function calculates which areas are available to cut, how many cuts of mean size would be needed to achieve the target
   # based on the mean biomass in a pixel.
   #Make an ageMap
   cohortData <- copy(cohortData)
   standAges <- cohortData[, .(BweightedAge = sum(B * age)/sum(B)), .(pixelGroup)]
-  
-  pixID <- data.table('pixelGroup' = getValues(pixelGroupMap), 
+
+  pixID <- data.table('pixelGroup' = getValues(pixelGroupMap),
                       "pixelIndex" = 1:ncell(pixelGroupMap),
                       "thlb" = getValues(thlb))
   pixID <- na.omit(pixID) #drop non-forested pixels, even if they're in thlb
   pixID <- pixID[thlb == 1,] #drop pixels that aren't in thlb
-  
+
   landStats <- standAges[pixID, on = c("pixelGroup")]
   landStats <- landStats[BweightedAge >= minAgesToHarvest,]
   #I assume this method is faster than matching the pixelGroup raster values with a vector
   harvestableAreas <- raster(thlb)
   thlb[landStats$pixelID] <- 1 #this will be spread probability
 
-  
+
   #calculate harvest target
   harvestTarget <- round(nrow(landStats) * target)
   minCuts <- round(harvestTarget/maxCutSize)
-  
+
   #if every cut reaches maximum size, you need minCuts to begin with
   initialCuts <- sample(landStats$pixelIndex, size = minCuts, replace = FALSE)
-  
+
   firstIteration <- spread2(landscape = harvestableAreas,
                             start = minCuts,
                             spreadProb = 0.3,
                             maxSize = maxCutSize)
-  
+
   return(harvest)
 }
 
@@ -175,5 +176,5 @@ harvestSpreadInputs <- function(pixelGroupMap,
 
   if (!suppliedElsewhere(object = c("rasterToMatch", "studyArea", "cohortData", "thlb", "pixelGroupMap"), sim)) {
     stop("please supply all objects - this module has no defaults at this time")
-  }  
+  }
 }
