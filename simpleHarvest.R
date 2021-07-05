@@ -83,15 +83,13 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
     },
     harvest = {
 
-      if (LandR::scheduleDisturbance(sim$rstCurrentHarvest, time(sim))) {
-        sim$rstCurrentHarvest <- harvestSpreadInputs(pixelGroupMap = sim$pixelGroupMap,
-                                                     cohortData = sim$cohortData,
-                                                     thlb = sim$thlb,
-                                                     maxCutSize = P(sim)$maxPatchSizetoHarvest,
-                                                     target = P(sim)$harvestTarget,
-                                                     minAgesToHarvest = P(sim)$minAgesToHarvest,
-                                                     harvestIndex = sim$harvestIndex)
-      }
+      sim$rstCurrentHarvest <- harvestSpreadInputs(pixelGroupMap = sim$pixelGroupMap,
+                                                   cohortData = sim$cohortData,
+                                                   thlb = sim$thlb,
+                                                   maxCutSize = P(sim)$maxPatchSizetoHarvest,
+                                                   target = P(sim)$harvestTarget,
+                                                   minAgesToHarvest = P(sim)$minAgesToHarvest,
+                                                   harvestIndex = sim$harvestIndex)
 
       sim <- scheduleEvent(sim, time(sim) + 1,  "simpleHarvest", "harvest")
 
@@ -136,7 +134,6 @@ harvestSpreadInputs <- function(pixelGroupMap,
                                 target,
                                 harvestIndex) {
 
-  browser()
   thlb[is.na(getValues(pixelGroupMap))] <- NA #pixels not in pixelGroupMap cannot be harvested
 
   #Make an ageMap
@@ -159,40 +156,46 @@ harvestSpreadInputs <- function(pixelGroupMap,
   harvestTarget <- round(nrow(landStats) * target)
   minCuts <- round(harvestTarget/maxCutSize)
 
-  #if every cut reaches maximum size, you need minCuts to begin with
+  #calculate initial cuts by assuming every cut reaches the max
   initialCuts <- sample(landStats$pixelIndex, size = minCuts, replace = FALSE)
 
   iteration <- spread2(landscape = harvestableAreas,
                        start = initialCuts,
                        asRaster = FALSE,
-                       spreadProb = 0.3,
+                       spreadProb = 0.25,
                        maxSize = maxCutSize)
-  #check what this is/should be
-  totalCut <- nrow(iteration)
-  while (totalCut < harvestTarget) {
 
-    browser()
+  rstCurrentHarvest <- raster(pixelGroupMap)
+  #set harvestable areas as 0
+  rstCurrentHarvest[!is.na(pixelGroupMap[])] <- 0
+
+  #update the current harvest and available areas
+  rstCurrentHarvest[iteration$pixels] <- 1
+  harvestableAreas[iteration$pixels] <- NA
+
+  totalCut <- nrow(iteration)
+  #iterate through spread until harvest is sufficient
+  #0.97 creates a buffer so harvest is not guaranteed to exceed target rate
+  while (totalCut <= 0.97 * harvestTarget) {
+
     newCuts <- round(c(1 - totalCut/harvestTarget) * minCuts)
     newLocs <- landStats[!pixelIndex %in% iteration$pixels]$pixelIndex
     newCutLocs <- sample(newLocs, size = newCuts, replace = FALSE)
 
-    harvestableAreas[iteration$pixels] <- NA
     nextIteration <- spread2(landscape = harvestableAreas,
-                         start = newCutLocs,
-                         asRaster = FALSE,
-                         spreadProb = 0.3,
-                         maxSize = maxCutSize)
+                             start = newCutLocs,
+                             asRaster = FALSE,
+                             spreadProb = 0.3,
+                             maxSize = maxCutSize)
 
-    totalCut <- length(nextIteration)
+    harvestableAreas[nextIteration$pixels] <- NA
+    rstCurrentHarvest[nextIteration$pixels] <- 1
+
+    totalCut <- totalCut + nrow(nextIteration)
     minCuts <- c(minCuts + newCuts)
   }
 
-  harvest <- raster(pixelGroupMap)
-  harvest[!is.na(harvest)] <- 0
-  harvest[iteration$loc] <- 1
-
-
-  return(harvest)
+   return(rstCurrentHarvest)
 }
 
 .inputObjects <- function(sim) {
