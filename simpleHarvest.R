@@ -30,7 +30,10 @@ defineModule(sim, list(
                     desc= "proportion of harvestable area to harvest each timestep"),
     defineParameter("minAgesToHarvest", "numeric", 50, 1, NA, desc =  "minimum ages of trees to harvest"),
     defineParameter("maxPatchSizetoHarvest", "numeric", 10, 1, NA,
-                    desc = "maximum size for harvestable patches, in pixels")
+                    desc = "maximum size for harvestable patches, in pixels"),
+    defineParameter("spreadProb", "numeric", 0.24, 0.01, 1,
+                    desc = paste("spread prob when determing harvest patch size. Larger spreadProb yields cuts closer to max.",
+                                 "Exceeding 0.24 will likely result in harvest patches that are maximum size"))
   ),
   inputObjects = bind_rows(
     expectsInput('cohortData', objectClass = 'data.table', desc = "table with pixelGroup, age, species, and biomass of cohorts"),
@@ -86,10 +89,12 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
       sim$rstCurrentHarvest <- harvestSpreadInputs(pixelGroupMap = sim$pixelGroupMap,
                                                    cohortData = sim$cohortData,
                                                    thlb = sim$thlb,
+                                                   spreadProb = P(sim)$spreadProb,
                                                    maxCutSize = P(sim)$maxPatchSizetoHarvest,
                                                    target = P(sim)$harvestTarget,
                                                    minAgesToHarvest = P(sim)$minAgesToHarvest,
                                                    harvestIndex = sim$harvestIndex)
+      sim$rstCurrentHarvest@data@attributes$Year <- time(sim)
 
       sim <- scheduleEvent(sim, time(sim) + 1,  "simpleHarvest", "harvest")
 
@@ -129,6 +134,7 @@ plotFun <- function(sim) {
 harvestSpreadInputs <- function(pixelGroupMap,
                                 cohortData,
                                 thlb,
+                                spreadProb,
                                 maxCutSize,
                                 minAgesToHarvest,
                                 target,
@@ -150,7 +156,7 @@ harvestSpreadInputs <- function(pixelGroupMap,
   landStats <- landStats[BweightedAge >= minAgesToHarvest,]
   #I assume this method is faster than matching the pixelGroup raster values with a vector
   harvestableAreas <- raster(thlb)
-  harvestableAreas[landStats$pixelIndex] <- 1
+  harvestableAreas[landStats$pixelIndex] <- spreadProb
 
   #calculate harvest target
   harvestTarget <- round(nrow(landStats) * target)
@@ -162,7 +168,7 @@ harvestSpreadInputs <- function(pixelGroupMap,
   iteration <- spread2(landscape = harvestableAreas,
                        start = initialCuts,
                        asRaster = FALSE,
-                       spreadProb = 0.25,
+                       spreadProb = harvestableAreas,
                        maxSize = maxCutSize)
 
   rstCurrentHarvest <- raster(pixelGroupMap)
@@ -185,17 +191,17 @@ harvestSpreadInputs <- function(pixelGroupMap,
     nextIteration <- spread2(landscape = harvestableAreas,
                              start = newCutLocs,
                              asRaster = FALSE,
-                             spreadProb = 0.3,
+                             spreadProb = harvestableAreas,
                              maxSize = maxCutSize)
 
-    harvestableAreas[nextIteration$pixels] <- NA
+    harvestableAreas[nextIteration$pixels] <- 0
     rstCurrentHarvest[nextIteration$pixels] <- 1
 
     totalCut <- totalCut + nrow(nextIteration)
     minCuts <- c(minCuts + newCuts)
   }
 
-   return(rstCurrentHarvest)
+  return(rstCurrentHarvest)
 }
 
 .inputObjects <- function(sim) {
