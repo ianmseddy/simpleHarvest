@@ -50,10 +50,11 @@ defineModule(sim, list(
   outputObjects = bind_rows(
     createsOutput(objectName = 'rstCurrentHarvest', objectClass = 'RasterLayer',
                   desc = 'Binary raster representing annual harvested areas'),
-    createsOutput(objectName = 'harvestExclusionRaster', objectClass = "RasterLayer",
-                  desc = "Binary raster representing areas that will never be harvested"),
-    createsOutput(objectName = "harvestIndex", objectClass = "data.table",
-                  desc = "data.table with cell indices for harvest areas")
+    createsOutput(objectName = "cumulativeHarvestMap", objectClass = "RasterLayer",
+                  desc = "cumulative harvest in raster form"),
+    createsOutput(objectName = "harvestSummary", objectClass = "data.table",
+                  desc = "data.table with year and pixel index of harvested pixels")
+
   )
 ))
 
@@ -92,8 +93,10 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
                                                    spreadProb = P(sim)$spreadProb,
                                                    maxCutSize = P(sim)$maxPatchSizetoHarvest,
                                                    target = P(sim)$harvestTarget,
-                                                   minAgesToHarvest = P(sim)$minAgesToHarvest,
-                                                   harvestIndex = sim$harvestIndex)
+                                                   minAgesToHarvest = P(sim)$minAgesToHarvest)
+      sim$cumulativeHarvestMap <- sim$rstCurrentHarvest + sim$cumulativeHarvestMap
+      harvestIndex <- data.table(year = time(sim), pixelIndex = getValues(sim$rstCurrentHarvest))
+      sim$harvestSummary <- rbind(sim$harvestSummary, harvestIndex)
       sim$rstCurrentHarvest@data@attributes$Year <- time(sim)
 
       sim <- scheduleEvent(sim, time(sim) + 1,  "simpleHarvest", "harvest")
@@ -111,6 +114,9 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
 ### template initialization
 Init <- function(sim) {
 
+  #initial harvest raster is 0 everywhere
+  sim$cumulativeHarvestMap <- setValues(sim$rasterToMatch, 0)
+  sim$harvestSummary = data.table(year = integer(0), pixelIndex = integer(0))
   return(invisible(sim))
 }
 
@@ -137,8 +143,7 @@ harvestSpreadInputs <- function(pixelGroupMap,
                                 spreadProb,
                                 maxCutSize,
                                 minAgesToHarvest,
-                                target,
-                                harvestIndex) {
+                                target) {
 
   thlb[is.na(getValues(pixelGroupMap))] <- NA #pixels not in pixelGroupMap cannot be harvested
 
