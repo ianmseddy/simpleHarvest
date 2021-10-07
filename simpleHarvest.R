@@ -95,7 +95,11 @@ doEvent.simpleHarvest = function(sim, eventTime, eventType) {
                                                    target = P(sim)$harvestTarget,
                                                    minAgesToHarvest = P(sim)$minAgesToHarvest)
       sim$cumulativeHarvestMap <- sim$rstCurrentHarvest + sim$cumulativeHarvestMap
-      harvestIndex <- data.table(year = time(sim), pixelIndex = getValues(sim$rstCurrentHarvest))
+      harvestIndex <- data.table(year = time(sim), pixelIndex = 1:ncell(sim$rstCurrentHarvest),
+                                 harvestStat = getValues(sim$rstCurrentHarvest))
+      harvestIndex <- harvestIndex[harvestStat == 1,]
+      harvestIndex[, harvestStat := NULL]
+
       sim$harvestSummary <- rbind(sim$harvestSummary, harvestIndex)
       sim$rstCurrentHarvest@data@attributes$Year <- time(sim)
 
