@@ -54,7 +54,6 @@ defineModule(sim, list(
                   desc = "cumulative harvest in raster form"),
     createsOutput(objectName = "harvestSummary", objectClass = "data.table",
                   desc = "data.table with year and pixel index of harvested pixels")
-
   )
 ))
 
