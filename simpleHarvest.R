@@ -319,13 +319,12 @@ harvestSpreadInputs <- function(pixelGroupMap,
   # thlb build from other layers if missing
   if (!suppliedElsewhere("thlb", sim)) {
     dem <- prepInputs(
+      url = "https://drive.google.com/file/d/14puAtns8oTZDtvWzpQ6_FgK4MbozGZFK/view?usp",
       targetFile = "gtopo30Canada.tif",
-      archive = NULL,
-      url = NULL,
-      to = sim$rasterToMatch,
       destinationPath = dPath,
       fun = "terra::rast",
       overwrite = FALSE,
+      to = sim$rasterToMatch,
       userTags = c(cacheTags, "dem")
     )
     
